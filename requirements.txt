@@ -1,0 +1,8 @@
+transformers
+datasets
+torch
+openai
+langchain
+langchain-groq
+python-dotenv
+langchain-openai
