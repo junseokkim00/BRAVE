@@ -1,7 +1,7 @@
 import argparse
 from tqdm import tqdm
 from datasets import load_dataset
-from utils import questionDecompose, evidenceExtractor, run_RAG, postprocess, multiEvidenceExtractor
+from utils import questionDecompose, evidenceExtractor, run_RAG, postprocess, multiEvidenceExtractor, singleEvidenceExtraction
 from LLMs import set_model
 import random
 import json
@@ -196,7 +196,54 @@ def rag(model, dataset):
                 'question': question,
                 'answer': answer,
                 'pred': pred,
-                'original_context': context,
+                'fine_grained_context': context,
+                'correct': pred == answer
+            }
+            f.write(json.dumps(json_file)+'\n')
+        
+        print(f"pred: {pred}\tlabel: {answer}")
+        if pred == answer:
+            cnt+=1
+        total_cnt+=1
+    return cnt, total_cnt
+
+def brave_bert(model, dataset):
+    cnt=0
+    total_cnt=0
+    preds_bert=[]
+    labels_bert=[]
+    for data in tqdm(dataset):
+        question, answer, sentences = data['question'], data['answer'], data['context']['sentences']
+        contexts = []
+        relevance_titles=[]
+        for sent, title in zip(sentences, data['context']['title']):
+            sent = ' '.join(sent)
+            decision = singleEvidenceExtraction(context=sent, question=question)
+            if decision:
+                contexts.append(sent)
+                relevance_titles.append(title)
+
+
+
+        print(f"{total_cnt+1}/{len(test_ds)} Question: {question}")
+        context=""
+        for idx, sent in enumerate(contexts):
+            context+=sent
+            context+='\n\n'
+        pred = run_RAG(model=model, context=context, question=question)
+        pred, answer = postprocess(pred, label=answer)
+        
+        preds_bert.append(pred)
+        labels_bert.append(answer)
+        with open(f'./brave_bert_{name}_hotpotQA_train_k:{k}_seed:{seed}.jsonl', 'a') as f:
+            json_file = {
+                'id': total_cnt,
+                'question': question,
+                'answer': answer,
+                'pred': pred,
+                'fine_grained_context': context,
+                'chosen_titles': relevance_titles,
+                'gold_chosen_titles': data['supporting_facts']['title'],
                 'correct': pred == answer
             }
             f.write(json.dumps(json_file)+'\n')
@@ -216,7 +263,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_split', type=str, default="fullwiki")
     parser.add_argument('--num_data', type=int)
     parser.add_argument('--model_name', type=str)
-    parser.add_argument('--run_type', type=str, choices=['brave', 'rag', 'plain', 'brave_wo_QD', 'brave_me'])
+    parser.add_argument('--run_type', type=str, choices=['brave', 'rag', 'plain', 'brave_wo_QD', 'brave_me', 'brave_bert'])
     parser.add_argument('--seed', type=int)
     args = parser.parse_args()
 
@@ -241,6 +288,7 @@ if __name__ == '__main__':
         'brave_wo_QD': brave_wo_QD,
         'brave_me': brave_me,
         'rag': rag,
+        'brave_bert': brave_bert
     }
     cnt, total_cnt = run_type_dict[run_type](model=model, dataset=test_ds)
 
