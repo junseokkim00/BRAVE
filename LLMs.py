@@ -12,6 +12,8 @@ def set_model(name:str):
     elif name in openai_models:
         os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
         llm = ChatOpenAI(model=name)
+    elif name == 'None':
+        llm = ""
     else:
         raise Exception(f"{name} is currently not supported.")
     
